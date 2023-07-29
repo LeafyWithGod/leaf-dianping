@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.hmdp.mapper.SeckillVoucherMapper">
+
+    <resultMap id="resultMap" type="com.hmdp.entity.SeckillVoucher">
+        <id property="voucherId" column="voucher_id"></id>
+        <result property="stock" column="stock"></result>
+        <result property="createTime" column="create_time"></result>
+        <result property="beginTime" column="begin_time"></result>
+        <result property="endTime" column="end_time"></result>
+        <result property="updateTime" column="update_time"></result>
+    </resultMap>
+
+    <update id="inventoryUpdate">
+        update
+            tb_seckill_voucher
+        set
+            stock=stock-1
+        where
+              voucher_id=#{voucherId} and stock > 0
+    </update>
+</mapper>
