@@ -1,7 +1,8 @@
 package com.hmdp.mapper;
 
-import com.hmdp.entity.VoucherOrder;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.hmdp.entity.VoucherOrder;
+import org.apache.ibatis.annotations.Param;
 
 /**
  * <p>
@@ -12,5 +13,5 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
  * @since 2021-12-22
  */
 public interface VoucherOrderMapper extends BaseMapper<VoucherOrder> {
-
+    int selectUserIdRepetition(@Param("userId") Long userId, @Param("voucherId") Long voucherId);
 }

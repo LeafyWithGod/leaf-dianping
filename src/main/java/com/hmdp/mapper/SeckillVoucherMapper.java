@@ -1,7 +1,7 @@
 package com.hmdp.mapper;
 
-import com.hmdp.entity.SeckillVoucher;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.hmdp.entity.SeckillVoucher;
 import org.apache.ibatis.annotations.Param;
 
 /**
@@ -14,4 +14,5 @@ import org.apache.ibatis.annotations.Param;
  */
 public interface SeckillVoucherMapper extends BaseMapper<SeckillVoucher> {
     boolean inventoryUpdate(@Param("voucherId") Long voucherId);
+
 }

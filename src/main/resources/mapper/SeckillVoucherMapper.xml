@@ -19,4 +19,5 @@
         where
               voucher_id=#{voucherId} and stock > 0
     </update>
+
 </mapper>
