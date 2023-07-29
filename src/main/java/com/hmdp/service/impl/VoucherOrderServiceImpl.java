@@ -7,12 +7,14 @@ import com.hmdp.entity.VoucherOrder;
 import com.hmdp.mapper.VoucherOrderMapper;
 import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
+import com.hmdp.utils.SnowflakeIdWorker;
 import com.hmdp.utils.UserHolder;
 import com.hmdp.utils.redisUtils.RedisIdWorker;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
 
 /**
@@ -37,6 +39,13 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Autowired
     private RedisIdWorker redisIdWorker;
 
+    private SnowflakeIdWorker idWorker;
+
+    @PostConstruct
+    public void init() {
+        idWorker = new SnowflakeIdWorker(workerId, datacenterId);
+    }
+
     /**
      * 抢购优惠券
      * @param voucherId
@@ -60,15 +69,13 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //扣减库存
         //乐观锁解决库存超卖的问题
         boolean success=seckillVoucherService.inventoryUpdate(voucherId);
-        System.err.println("---------------------------------------"+success+","+voucher.getStock()+"---------------------------------------");
         if (!success){
             Result.fail("库存不足");
         }
         //创建订单
         VoucherOrder voucherOrder = new VoucherOrder();
-//        SnowflakeIdWorker idWorker = new SnowflakeIdWorker(workerId,datacenterId);
         //订单id
-        long orderId = redisIdWorker.nextId("voucher");
+        long orderId = idWorker.nextId();
         voucherOrder.setId(orderId);
         //用户id
         voucherOrder.setUserId(UserHolder.getUser().getId());
