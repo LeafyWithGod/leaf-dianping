@@ -9,7 +9,6 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.hmdp.utils.SnowflakeIdWorker;
 import com.hmdp.utils.UserHolder;
-import com.hmdp.utils.redisUtils.RedisIdWorker;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -35,9 +34,6 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     @Autowired
     private ISeckillVoucherService seckillVoucherService;
-
-    @Autowired
-    private RedisIdWorker redisIdWorker;
 
     private SnowflakeIdWorker idWorker;
 
@@ -70,7 +66,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //乐观锁解决库存超卖的问题
         boolean success=seckillVoucherService.inventoryUpdate(voucherId);
         if (!success){
-            Result.fail("库存不足");
+            return Result.fail("库存不足");
         }
         //创建订单
         VoucherOrder voucherOrder = new VoucherOrder();
