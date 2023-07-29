@@ -13,8 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-import static com.hmdp.utils.redisUtils.RedisConstants.CACHE_NULL_TTL;
-import static com.hmdp.utils.redisUtils.RedisConstants.LOCK_SHOP_KEY;
+import static com.hmdp.utils.redisUtils.RedisConstants.*;
 
 /**
  * 直接操作数据库类
@@ -100,6 +99,7 @@ public class RedisCacheServiceImpl implements IRedisCacheService {
     }
 
     /**
+     * 查询-先去reidis里面查询没有再去mysql
      * 基于互斥锁实现缓存击穿(使用缓存空值解决缓存穿透)
      * @param keyPrefix   前缀key
      * @param id          id
@@ -125,7 +125,7 @@ public class RedisCacheServiceImpl implements IRedisCacheService {
                 if (cacheObject != null)
                     //如果有值转化返回
                     return BeanUtil.copyProperties(cacheObject, type);
-                boolean trylock = redisCache.trylock(lockKey);
+                boolean trylock = redisCache.trylock(lockKey,LOCK_SHOP_TTL);
                 if (trylock)
                     break;
                 Thread.sleep(50);
@@ -150,7 +150,8 @@ public class RedisCacheServiceImpl implements IRedisCacheService {
     }
 
     /**
-     *
+     * 查询-先去reidis里面查询没有再去mysql
+     *基于逻辑过期实现缓存击穿(使用缓存空值解决缓存穿透)
      * @param keyPrefix   前缀key
      * @param id          id
      * @param type        查询类型字节码
@@ -175,7 +176,7 @@ public class RedisCacheServiceImpl implements IRedisCacheService {
             //未过期直接返回
             return data;
         //过期开始获取锁
-        boolean trylock = redisCache.trylock(lockKey);
+        boolean trylock = redisCache.trylock(lockKey,LOCK_SHOP_TTL);
         if (!trylock)
             //未获取到锁直接返回
             return data;

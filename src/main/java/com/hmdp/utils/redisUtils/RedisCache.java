@@ -254,18 +254,23 @@ public class RedisCache
 
 
     /**
-     * 获取锁
+     * 获取互斥锁
      * @param key 商铺key
      * @return
      */
-    public boolean trylock(String key){
-        return redisTemplate.opsForValue().setIfAbsent(key,"1",RedisConstants.LOCK_SHOP_TTL,TimeUnit.SECONDS);
+    public boolean trylock(String key,Long TTL){
+        Boolean isAbs = redisTemplate.opsForValue().setIfAbsent(key, "1", TTL, TimeUnit.SECONDS);
+        return Boolean.TRUE.equals(isAbs);
     }
 
+
+    /**
+     * 释放锁
+     * @param key
+     * @return
+     */
     public boolean onlock(String key){
         return redisTemplate.delete(key);
     }
-
-
 
 }

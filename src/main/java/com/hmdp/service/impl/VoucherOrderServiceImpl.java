@@ -9,6 +9,7 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.hmdp.utils.SnowflakeIdWorker;
 import com.hmdp.utils.UserHolder;
+import com.hmdp.utils.redisUtils.RedisCache;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,6 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
+
+import static com.hmdp.utils.redisUtils.RedisConstants.LOCK_KEY;
+import static com.hmdp.utils.redisUtils.RedisConstants.VOUCHER_KEY;
 
 /**
  * <p>
@@ -39,6 +43,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     @Autowired
     private VoucherOrderMapper voucherOrderMapper;
+
+    @Autowired
+    private RedisCache redisCache;
 
     private SnowflakeIdWorker idWorker;
 
@@ -69,13 +76,21 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         if (voucher.getStock() < 1)
             //库存不够报错
             return Result.fail("库存不足");
-
         //使用用户id为锁，这样相同id就会受阻，不同id就不会收到影响
         //intern去常量池查找是否有一样的字符串
-        synchronized (userId.toString().intern()) {
-            //获取自身代理对象(事务)，否则直接调方法事务无法生效
-            IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
+        //synchronized (userId.toString().intern()) //synchronized锁对集群不起作用，分布式锁对集群有效
+        String lockKey = LOCK_KEY + ":" + VOUCHER_KEY + userId;
+        boolean trylock = redisCache.trylock(lockKey, 1200L);
+        if (!trylock)
+            return Result.fail("系统繁忙，请稍后重试");
+        //获取自身代理对象(事务)，否则直接调方法事务无法生效
+        IVoucherOrderService proxy;
+        try {
+            proxy = (IVoucherOrderService) AopContext.currentProxy();
             return proxy.createVoucherOrder(voucherId, userId);
+        } finally {
+            //释放锁
+            redisCache.onlock(lockKey);
         }
     }
 
