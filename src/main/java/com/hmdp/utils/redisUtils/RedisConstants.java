@@ -13,7 +13,7 @@ public class RedisConstants {
 
     public static final String LOCK_KEY="lock";
     public static final String VOUCHER_KEY="voucher";
-    public static final Long LOCK_TTL=5L;
+    public static final Long LOCK_TTL=10L;
 
     public static final String LOCK_SHOP_KEY = "lock:shop:";
     public static final Long LOCK_SHOP_TTL = 10L;

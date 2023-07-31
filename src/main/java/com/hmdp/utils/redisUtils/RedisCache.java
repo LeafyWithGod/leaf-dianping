@@ -1,10 +1,13 @@
 package com.hmdp.utils.redisUtils;
 
+import cn.hutool.core.lang.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.BoundSetOperations;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -253,24 +256,62 @@ public class RedisCache
     }
 
 
+
+    //线程标识符UUID部分
+    private static final String Id_PREFIX= UUID.randomUUID().toString(true)+"-";
+    //加载lua脚本
+    private static final DefaultRedisScript<Long> UNLOCK_SCRIPT;
+    static {
+        UNLOCK_SCRIPT=new DefaultRedisScript<>();
+        //初始化脚本就在resources下面的unlock.lua
+        UNLOCK_SCRIPT.setLocation(new ClassPathResource("unlock.lua"));
+        //设置返回值类型
+        UNLOCK_SCRIPT.setResultType(Long.class);
+    }
+
     /**
      * 获取互斥锁
      * @param key 商铺key
      * @return
      */
     public boolean trylock(String key,Long TTL){
-        Boolean isAbs = redisTemplate.opsForValue().setIfAbsent(key, "1", TTL, TimeUnit.SECONDS);
+        //线程标识＝UUID+线程id
+        String threadId = Id_PREFIX + Thread.currentThread().getId();
+        Boolean isAbs = redisTemplate.opsForValue().setIfAbsent(key, threadId, TTL, TimeUnit.SECONDS);
         return Boolean.TRUE.equals(isAbs);
     }
 
 
     /**
-     * 释放锁
+     * 使用lua脚本判断并解锁
      * @param key
      * @return
      */
     public boolean onlock(String key){
-        return redisTemplate.delete(key);
+        String threadId = Id_PREFIX + Thread.currentThread().getId();
+        redisTemplate.execute(
+                UNLOCK_SCRIPT,
+                Collections.singletonList(key),
+                threadId
+        );
+        return true;
     }
+
+//    /**
+//     * 释放锁(手动判断)
+//     * @param key
+//     * @return
+//     */
+//    public boolean onlock(String key){
+//        //获取线程标识
+//        String threadId = Id_PREFIX + Thread.currentThread().getId();
+//        //获取锁标识
+//        String str = (String) redisTemplate.opsForValue().get(key);
+//        //判断是否标识是否一致
+//        if (threadId.equals(str))
+//            //一致则释放锁
+//            return redisTemplate.delete(key);
+//        return true;
+//    }
 
 }

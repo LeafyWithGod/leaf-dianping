@@ -10,6 +10,8 @@ import com.hmdp.service.IVoucherOrderService;
 import com.hmdp.utils.SnowflakeIdWorker;
 import com.hmdp.utils.UserHolder;
 import com.hmdp.utils.redisUtils.RedisCache;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,10 +49,14 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Autowired
     private RedisCache redisCache;
 
+    @Autowired
+    private RedissonClient redissonClient;
+
     private SnowflakeIdWorker idWorker;
 
     @PostConstruct
     public void init() {
+        System.err.println("------------------workerId-"+workerId+"--datacenterId-"+datacenterId+"------------------");
         idWorker = new SnowflakeIdWorker(workerId, datacenterId);
     }
 
@@ -80,7 +86,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //intern去常量池查找是否有一样的字符串
         //synchronized (userId.toString().intern()) //synchronized锁对集群不起作用，分布式锁对集群有效
         String lockKey = LOCK_KEY + ":" + VOUCHER_KEY + userId;
-        boolean trylock = redisCache.trylock(lockKey, 1200L);
+        RLock lock = redissonClient.getLock(lockKey);
+        boolean trylock =lock.tryLock();
         if (!trylock)
             return Result.fail("系统繁忙，请稍后重试");
         //获取自身代理对象(事务)，否则直接调方法事务无法生效
@@ -90,7 +97,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             return proxy.createVoucherOrder(voucherId, userId);
         } finally {
             //释放锁
-            redisCache.onlock(lockKey);
+            lock.unlock();
         }
     }
 
