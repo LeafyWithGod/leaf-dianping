@@ -26,5 +26,5 @@ logging:
   level:
     com.hmdp: debug
 SnowflakeIdWorkerSetting:
-  worker-id: 2 #雪花算法机器ID
+  worker-id: 1 #雪花算法机器ID
   datacenter-id: 1 #数据机房ID

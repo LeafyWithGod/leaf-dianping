@@ -5,7 +5,6 @@ import com.hmdp.entity.User;
 import com.hmdp.service.impl.UserServiceImpl;
 import com.hmdp.utils.SnowflakeIdWorker;
 import com.hmdp.utils.redisUtils.RedisCache;
-import com.hmdp.utils.redisUtils.RedisIdWorker;
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,9 +24,6 @@ class HmDianPingApplicationTests {
 
     @Autowired
     private UserServiceImpl userService;
-
-    @Autowired
-    private RedisIdWorker redisIdWorker;
 
     private static final ExecutorService en = Executors.newFixedThreadPool(500);
 
