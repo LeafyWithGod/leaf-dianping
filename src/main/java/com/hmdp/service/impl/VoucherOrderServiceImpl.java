@@ -8,7 +8,10 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.hmdp.utils.SnowflakeIdWorker;
 import com.hmdp.utils.UserHolder;
+import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
@@ -19,6 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.PostConstruct;
 import java.util.Collections;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import static com.hmdp.utils.redisUtils.RedisConstants.LOCK_KEY;
+import static com.hmdp.utils.redisUtils.RedisConstants.VOUCHER_KEY;
 
 /**
  * <p>
@@ -29,6 +39,7 @@ import java.util.Collections;
  * @since 2021-12-22
  */
 @Service
+@Slf4j
 public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, VoucherOrder> implements IVoucherOrderService {
 
     @Value("${SnowflakeIdWorkerSetting.worker-id}")
@@ -54,18 +65,86 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private static final DefaultRedisScript<Long> SECKILL_SCRIPT;
     static {
         SECKILL_SCRIPT=new DefaultRedisScript<>();
-        //初始化脚本就在resources下面的unlock.lua
-        SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
-        //设置返回值类型
-        SECKILL_SCRIPT.setResultType(Long.class);
+        try {
+            //初始化脚本就在resources下面的unlock.lua
+            SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
+            //设置返回值类型
+            SECKILL_SCRIPT.setResultType(Long.class);
+        } catch (Exception e) {
+            log.error("加载lua脚本seckill失败");
+            e.printStackTrace();
+        }
     }
 
     @PostConstruct
     public void init() {
-        System.err.println("------------------workerId-"+workerId+"--datacenterId-"+datacenterId+"------------------");
-        idWorker = new SnowflakeIdWorker(workerId, datacenterId);
+        log.info("------------------workerId-"+workerId+"--datacenterId-"+datacenterId+"------------------");
+        try {
+            idWorker = new SnowflakeIdWorker(workerId, datacenterId);
+            seckill_order_executor.submit(new VoucherOrderHandler());
+        } catch (Exception e) {
+            log.error("初始化SnowflakeIdWorker失败");
+            e.printStackTrace();
+        }
     }
 
+    private BlockingQueue<VoucherOrder> orders=new ArrayBlockingQueue<>(1024*1024);
+    private static final ExecutorService seckill_order_executor = Executors.newSingleThreadExecutor();
+    private class VoucherOrderHandler implements Runnable{
+        @Override
+        public void run() {
+            while (true){
+                try {
+                    //获取队列信息
+                    VoucherOrder voucherOrder = orders.take();
+                    //创建订单
+                    handerVoucherOrder(voucherOrder);
+                } catch (Exception e) {
+                    log.error("订单异常",e);
+                }
+
+            }
+        }
+    }
+
+    IVoucherOrderService proxy;
+    private void handerVoucherOrder(VoucherOrder voucherOrder){
+        // 获取用户
+        Long userId = voucherOrder.getUserId();
+        String lockKey = LOCK_KEY + ":" + VOUCHER_KEY + userId;
+        RLock lock = redissonClient.getLock(lockKey);
+        boolean trylock =lock.tryLock();
+        if (!trylock)
+            return;
+        //获取自身代理对象(事务)，否则直接调方法事务无法生效
+        try {
+            proxy.createVoucherOrder(voucherOrder);
+        } finally {
+            //释放锁
+            lock.unlock();
+        }
+    }
+    /**
+     * 提取方法，方便加锁
+     * @return
+     */
+    @Transactional
+    public void createVoucherOrder(VoucherOrder voucherOrder) {
+        //查询用户是否已经抢过该优惠券(一人一单)
+        int isRt = voucherOrderMapper.selectUserIdRepetition(voucherOrder.getUserId(), voucherOrder.getVoucherId());
+
+        if (isRt > 0) {
+            return;
+        }
+        //扣减库存
+        //乐观锁解决库存超卖的问题
+        boolean success = seckillVoucherService.inventoryUpdate(voucherOrder.getVoucherId());
+        if (!success) {
+            return;
+        }
+        //添加订单
+        save(voucherOrder);
+    }
 
     /**
      * 抢购优惠券(使用lua脚本)
@@ -81,19 +160,30 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         Long result = (Long) redisTemplate.execute(
                 SECKILL_SCRIPT,
                 Collections.emptyList(),
-                voucherId.toString(), userId.toString()
+                Long.toString(voucherId), Long.toString(userId)
         );
         // 判断结果为0(有购买资格)，1(库存不足)，2(购买过)
 
         if (result != 0L){
             return Result.fail(result==1?"库存不足":"您已抢购过这个商品");
         }
-        // 为0下单信息保存到阻塞队列
-        //TODO 保存到阻塞队列
-
+        // 为0就创建下单信息保存到阻塞队列
+        //创建订单
+        VoucherOrder voucherOrder = new VoucherOrder();
+        //订单id
+        long orderId = idWorker.nextId();
+        voucherOrder.setId(orderId);
+        //用户id
+        voucherOrder.setUserId(userId);
+        //优惠券id
+        voucherOrder.setVoucherId(voucherId);
+        // 保存到阻塞队列
+        orders.add(voucherOrder);
+        proxy = (IVoucherOrderService) AopContext.currentProxy();
         // 返回订单id
-        return Result.ok(001);
+        return Result.ok(orderId);
     }
+
 
 
 //    /**
